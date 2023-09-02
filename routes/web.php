@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', 'HomeController');
+Route::get('/', 'HomeController')->name('home');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

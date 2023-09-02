@@ -1,5 +1,15 @@
-<x-layout class="p-10">
-    <div class="grid max-w-3xl grid-cols-3 gap-10 mx-auto">
+<x-layout>
+    <header class="flex items-center justify-between h-16 px-6 border-b border-gray-400">
+        <a href="{{ route('home') }}" class="text-xl font-bold transition-colors hover:text-blue-600">
+            {{ config('app.name') }}
+        </a>
+
+        <div class="flex items-center space-x-2">
+            <img src={{ Vite::asset('resources/images/coin.png') }} class="h-5" alt="coin" />
+            <span class="font-bold">6000</span>
+        </div>
+    </header>
+    <div class="grid max-w-3xl grid-cols-3 gap-10 mx-auto mt-6">
         @foreach ($packages as $package)
             <div class="flex flex-col p-2 space-y-4 transition-transform duration-300 border border-gray-200 rounded-lg hover:scale-105">
                 <div class="relative flex items-center justify-center w-full bg-gray-200 rounded-md select-none h-28">
