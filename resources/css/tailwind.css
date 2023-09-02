@@ -2,3 +2,9 @@
 @tailwind utilities;
 @tailwind components;
 @tailwind variants;
+
+*,
+*::before,
+*::after {
+    outline: none;
+}

@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nunito:400,700" />
     @vite(['resources/css/tailwind.css'])
 </head>
-<body {{ $attributes->merge(['class' => 'w-screen min-h-screen p-10 overflow-x-hidden bg-gray-100']) }}>
+<body {{ $attributes->merge(['class' => 'font-sans antialiased w-screen min-h-screen overflow-x-hidden bg-gray-100']) }}>
     {{ $slot }}
+    <script src="//unpkg.com/alpinejs" defer></script>
 </body>
 </html>
