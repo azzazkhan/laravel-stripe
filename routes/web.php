@@ -15,15 +15,26 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', 'HomeController')->name('home');
+Route::view('/dashboard', 'dashboard')->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::prefix('checkout')
+    ->name('checkout.')
+    ->controller('CheckoutController')
+    ->middleware('auth')
+    ->group(function () {
+        Route::post('', 'checkout')->name('initiate');
+        Route::get('{transaction:ulid}/success', 'success')->name('success');
+        Route::get('{transaction:ulid}/cancel', 'cancel')->name('cancel');
+    });
 
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', 'ProfileController@edit')->name('profile.edit');
-    Route::patch('/profile', 'ProfileController@update')->name('profile.update');
-    Route::delete('/profile', 'ProfileController@destroy')->name('profile.destroy');
-});
+Route::prefix('profile')
+    ->controller('ProfileController')
+    ->name('profile.')
+    ->middleware('auth')
+    ->group(function () {
+        Route::get('', 'edit')->name('edit');
+        Route::patch('', 'update')->name('update');
+        Route::delete('', 'destroy')->name('destroy');
+    });
 
 require __DIR__ . '/auth.php';
