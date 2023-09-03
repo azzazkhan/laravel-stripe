@@ -157,6 +157,10 @@ class CheckoutController extends Controller
             $transaction->status = 'completed';
             $transaction->save();
 
+            logger()->channel('stderr')->debug('Session already completed cannot cancel!');
+            $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
+            Storage::put("checkout/$filename", $session->toJSON());
+
             // TODO: Credit the user
 
             abort(Response::HTTP_BAD_REQUEST, 'The order was already paid!');
@@ -168,11 +172,20 @@ class CheckoutController extends Controller
             $transaction->status = 'pending';
             $transaction->save();
 
+            logger()->channel('stderr')->debug('Session already expired cannot cancel!');
+            $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
+            Storage::put("checkout/$filename", $session->toJSON());
+
             abort(Response::HTTP_BAD_REQUEST, 'The order was expired!');
         }
 
+        $session->expire();
         $transaction->status = 'cancelled';
         $transaction->save();
+
+        logger()->channel('stderr')->debug('Expired the session and cancelled transaction!');
+        $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
+        Storage::put("checkout/$filename", $session->toJSON());
 
         $transaction->load('package');
 
