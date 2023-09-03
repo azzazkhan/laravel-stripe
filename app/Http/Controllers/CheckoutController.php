@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Package;
 use App\Models\Transaction;
-use Illuminate\Http\RedirectResponse;
+use App\Services\TransactionCreditService;
+use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -19,9 +20,9 @@ class CheckoutController extends Controller
      * Handle incoming checkout request.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse
+     * @return \Illuminate\Contracts\Support\Responsable
      */
-    public function checkout(Request $request): RedirectResponse
+    public function checkout(Request $request): Responsable
     {
         $validated = $request->validate([
             'package' => ['required', 'string', Rule::exists('packages', 'id')],
@@ -48,9 +49,9 @@ class CheckoutController extends Controller
                 // /checkout/{transaction}/success?session={CHECKOUT_SESSION_ID}
                 'success_url' => route(
                     'checkout.success',
-                    ['transaction' => $secret, 'session' => '{CHECKOUT_SESSION_ID}'],
+                    ['transaction' => $secret],
                     true
-                ),
+                ) . '?session={CHECKOUT_SESSION_ID}',
                 'cancel_url' => route('checkout.cancel', ['transaction' => $secret], true)
             ],
         );
@@ -78,7 +79,7 @@ class CheckoutController extends Controller
 
         $transaction->save();
 
-        return redirect(route('home'));
+        return $checkout;
     }
 
     /**
@@ -91,7 +92,7 @@ class CheckoutController extends Controller
     public function success(Request $request, Transaction $transaction): View
     {
         $validated = $request->validate([
-            'session' => ['required', 'string', 'min:58']
+            'session' => ['required', 'string']
         ]);
 
         /** @var \App\Models\User */
@@ -104,8 +105,16 @@ class CheckoutController extends Controller
 
         logger()->channel('stderr')->debug('Received checkout success request');
 
-        abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was already cancelled!');
-        abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order was expired!');
+        abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was cancelled!');
+        abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order expired!');
+
+        $amount = number_format($transaction->amount, 2);
+        $package = $transaction->package;
+
+        // Transaction already marked successful by webhooks and resources were
+        // credited to the user's account
+        if ($transaction->successful)
+            return view('checkout.success', compact('amount', 'package'));
 
         logger()->channel('stderr')->debug('Retrieving and validating checkout session');
 
@@ -116,26 +125,14 @@ class CheckoutController extends Controller
         $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
         Storage::put("checkout/$filename", $session->toJSON());
 
-        // Possible values (paid/unpaid/no_payment_required)
-        // $session->payment_status;
-
         // Stripe may have mistakenly redirected the user, redirect back to the
         // payment URL
         if ($session->payment_status != 'paid')
             return redirect($session->url);
 
-        // Confirmation was successful mark the transaction as completed
-        $transaction->received = $session->amount_total;
-        $transaction->status = 'completed';
-        $transaction->save();
-
-        $amount = number_format($transaction->amount, 2);
-        $package = $transaction->package;
-
-        // TODO: Wrap in a DB transaction
-        //* Crediting the coins to user's account
-        $coins = $transaction->package->coins;
-        $user->update(['coins' => $user->coins + $coins, 'balance' => $user->balance + $coins]);
+        // Mark the transaction as successful and credit the resources to user
+        // if not already credited
+        TransactionCreditService::credit($transaction);
 
         return view('checkout.success', compact('amount', 'package'));
     }
@@ -153,44 +150,20 @@ class CheckoutController extends Controller
         $user = $request->user();
 
         abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
-        abort_if($transaction->successful, Response::HTTP_BAD_REQUEST, 'The order was already paid!');
+        abort_if($transaction->successful, Response::HTTP_BAD_REQUEST, 'The payment was already received!');
         abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was already cancelled!');
         abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order was expired!');
 
+        $amount = number_format($transaction->amount, 2);
+        $package = $transaction->package->name;
+
+        // Transaction was already cancelled
+        if ($transaction->cancelled)
+            return view('checkout.cancel', compact('amount', 'package'));
+
         $session = Cashier::stripe()->checkout->sessions->retrieve($transaction->session);
+        @$session->expire(); // Expire the stripe checkout session
 
-        // The session was successful, update in database
-        if ($session->payment_status == 'paid') {
-            $transaction->received = $session->amount_total;
-            $transaction->status = 'completed';
-            $transaction->save();
-
-            logger()->channel('stderr')->debug('Session already completed cannot cancel!');
-            $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
-            Storage::put("checkout/$filename", $session->toJSON());
-
-            // TODO: Wrap in a DB transaction
-            //* Crediting the coins to user's account
-            $coins = $transaction->package->coins;
-            $user->update(['coins' => $user->coins + $coins, 'balance' => $user->balance + $coins]);
-
-            abort(Response::HTTP_BAD_REQUEST, 'The order was already paid!');
-        }
-
-        // The session is already expired
-        if ($session->expires_at >= (int) date('U')) {
-            $session->expire();
-            $transaction->status = 'pending';
-            $transaction->save();
-
-            logger()->channel('stderr')->debug('Session already expired cannot cancel!');
-            $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
-            Storage::put("checkout/$filename", $session->toJSON());
-
-            abort(Response::HTTP_BAD_REQUEST, 'The order was expired!');
-        }
-
-        $session->expire();
         $transaction->status = 'cancelled';
         $transaction->save();
 
@@ -198,9 +171,6 @@ class CheckoutController extends Controller
         $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
         Storage::put("checkout/$filename", $session->toJSON());
 
-        $amount = number_format($transaction->amount, 2);
-        $package = $transaction->package->name;
-
-        return view('checkout.cancelled', compact('amount', 'package'));
+        return view('checkout.cancel', compact('amount', 'package'));
     }
 }
