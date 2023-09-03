@@ -22,7 +22,6 @@ return new class extends Migration
             // Payment and account related
             $table->string('balance');
             $table->unsignedSmallInteger('coins')->default(0);
-            $table->string('stripe_id')->nullable()->index();
 
             $table->timestamps();
         });
