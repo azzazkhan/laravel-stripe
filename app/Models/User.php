@@ -8,6 +8,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
 use Laravel\Sanctum\HasApiTokens;
+use Stripe\Exception\ApiErrorException;
+
 use function Illuminate\Events\queueable;
 
 class User extends Authenticatable
@@ -62,6 +64,7 @@ class User extends Authenticatable
             $user->createAsStripeCustomer([
                 'description' => sprintf('Created by %s on registration', config('app.name')),
             ]);
+            logger()->channel('stderr')->debug('New Stripe customer created!');
         });
 
         static::updated(queueable(function (User $customer) {
@@ -72,6 +75,17 @@ class User extends Authenticatable
         static::retrieved(function (User $user) {
             if ($user->coins != (int) $user->balance)
                 $user->update(['coins' => (int) $user->balance]);
+        });
+
+        static::deleted(function (User $user) {
+            if ($user->hasStripeId())
+                try {
+                    $user->stripe()->customers->delete($user->stripeId());
+                    logger()->channel('stderr')->debug('Stripe customer deleted!');
+                } catch (ApiErrorException $e) {
+                    logger('stderr')->error('Could not delete stripe customer!');
+                    logger()->channel('stderr')->error('Could not delete stripe customer!', ['message' => $e->getMessage()]);
+                }
         });
     }
 }
