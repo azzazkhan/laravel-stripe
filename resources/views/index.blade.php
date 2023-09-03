@@ -1,5 +1,5 @@
 <x-layout>
-    <header class="flex items-center justify-between h-16 px-6 border-b border-gray-400">
+    <header class="flex items-center justify-between h-16 px-6 border-b border-gray-300">
         <a href="{{ route('home') }}" class="text-xl font-bold transition-colors hover:text-blue-600">
             {{ config('app.name') }}
         </a>
@@ -11,9 +11,15 @@
             </div>
         @endauth
     </header>
-    <div class="grid max-w-3xl grid-cols-3 gap-10 mx-auto mt-6">
+    <div class="grid max-w-3xl grid-cols-3 mx-auto mt-6 gap-x-10 gap-y-6">
         @foreach ($packages as $package)
-            <div class="flex flex-col p-2 space-y-4 border border-gray-200 rounded-lg">
+            <form
+                action="{{ route('checkout.initiate') }}"
+                method="POST"
+                class="flex flex-col p-2 space-y-4 border border-gray-200 rounded-lg"
+            >
+                @csrf
+                <input type="hidden" name="package" value="{{ $package->id }}" />
                 <div class="relative flex items-center justify-center w-full bg-gray-200 rounded-md select-none h-28">
                     <h1 class="text-lg font-bold">{{ $package->name }}</h1>
 
@@ -26,7 +32,7 @@
                 </div>
                 @auth
                     <button
-                        type="button"
+                        type="submit"
                         class="flex items-center justify-center w-full h-10 font-bold text-white transition-colors bg-blue-500 rounded-md hover:bg-blue-600"
                     >
                         Buy Now <span class="pl-1 text-xs">(${{ $package->price }})</span>
@@ -40,7 +46,7 @@
                         Login
                     </a>
                 @endauth
-            </div>
+            </form>
         @endforeach
     </div>
 </x-layout>
