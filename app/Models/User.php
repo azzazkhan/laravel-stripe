@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
 use Laravel\Sanctum\HasApiTokens;
+use function Illuminate\Events\queueable;
 
 class User extends Authenticatable
 {
@@ -59,10 +60,14 @@ class User extends Authenticatable
 
         static::created(function (User $user) {
             $user->createAsStripeCustomer([
-                'name' => $user->name,
                 'description' => sprintf('Created by %s on registration', config('app.name')),
             ]);
         });
+
+        static::updated(queueable(function (User $customer) {
+            if ($customer->hasStripeId())
+                $customer->syncStripeCustomerDetails();
+        }));
 
         static::retrieved(function (User $user) {
             if ($user->coins != (int) $user->balance)
