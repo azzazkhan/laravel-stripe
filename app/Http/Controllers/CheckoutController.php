@@ -94,9 +94,12 @@ class CheckoutController extends Controller
             'session' => ['required', 'string', 'min:58']
         ]);
 
+        /** @var \App\Models\User */
+        $user = $request->user();
+
         // Make sure the transaction initiated by the user and the session
         // ID matches with the transaction
-        abort_if($transaction->user_id != $request->user()->id, Response::HTTP_NOT_FOUND);
+        abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
         abort_if($transaction->session != $validated['session'], Response::HTTP_NOT_FOUND);
 
         logger()->channel('stderr')->debug('Received checkout success request');
@@ -126,13 +129,15 @@ class CheckoutController extends Controller
         $transaction->status = 'completed';
         $transaction->save();
 
-        $transaction->load('package');
+        $amount = number_format($transaction->amount, 2);
+        $package = $transaction->package;
 
-        // TODO: Credit the coins to user's account in a DB transaction
-        // $coins = $transaction->package->coins;
-        // $user->update(['coins' => $user->coins + $coins, 'balance' => $user->balance + $coins]);
+        // TODO: Wrap in a DB transaction
+        //* Crediting the coins to user's account
+        $coins = $transaction->package->coins;
+        $user->update(['coins' => $user->coins + $coins, 'balance' => $user->balance + $coins]);
 
-        return view('checkout.success', compact('transaction'));
+        return view('checkout.success', compact('amount', 'package'));
     }
 
     /**
@@ -144,7 +149,10 @@ class CheckoutController extends Controller
      */
     public function cancel(Request $request, Transaction $transaction): View
     {
-        abort_if($transaction->user_id != $request->user()->id, Response::HTTP_NOT_FOUND);
+        /** @var \App\Models\User */
+        $user = $request->user();
+
+        abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
         abort_if($transaction->successful, Response::HTTP_BAD_REQUEST, 'The order was already paid!');
         abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was already cancelled!');
         abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order was expired!');
@@ -161,7 +169,10 @@ class CheckoutController extends Controller
             $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
             Storage::put("checkout/$filename", $session->toJSON());
 
-            // TODO: Credit the user
+            // TODO: Wrap in a DB transaction
+            //* Crediting the coins to user's account
+            $coins = $transaction->package->coins;
+            $user->update(['coins' => $user->coins + $coins, 'balance' => $user->balance + $coins]);
 
             abort(Response::HTTP_BAD_REQUEST, 'The order was already paid!');
         }
@@ -187,8 +198,9 @@ class CheckoutController extends Controller
         $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
         Storage::put("checkout/$filename", $session->toJSON());
 
-        $transaction->load('package');
+        $amount = number_format($transaction->amount, 2);
+        $package = $transaction->package->name;
 
-        return view('checkout.cancelled', compact('transaction'));
+        return view('checkout.cancelled', compact('amount', 'package'));
     }
 }
