@@ -21,6 +21,8 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'coins',
+        'balance',
         'password',
     ];
 
@@ -30,6 +32,7 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $hidden = [
+        'balance',
         'password',
         'remember_token',
     ];
@@ -40,7 +43,30 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
+        'balance' => 'encrypted',
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            $user->balance = $user->balance ?: 0;
+        });
+
+        static::created(function (User $user) {
+            $user->createAsStripeCustomer([
+                'name' => $user->name,
+                'description' => sprintf('Created by %s on registration', config('app.name')),
+            ]);
+        });
+
+        static::retrieved(function (User $user) {
+            if ($user->coins != (int) $user->balance)
+                $user->update(['coins' => (int) $user->balance]);
+        });
+    }
 }

@@ -15,10 +15,15 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
-            $table->string('stripe_id')->nullable()->index();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
+
+            // Payment and account related
+            $table->string('balance');
+            $table->unsignedSmallInteger('coins')->default(0);
+            $table->string('stripe_id')->nullable()->index();
+
             $table->timestamps();
         });
     }
