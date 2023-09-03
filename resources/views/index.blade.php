@@ -9,6 +9,14 @@
                 <img src={{ Vite::asset('resources/images/coin.png') }} class="h-5" alt="coin" />
                 <span class="font-bold">{{ Auth::user()->balance }}</span>
             </div>
+        @else
+            <a
+                href="{{ route('register') }}"
+                role="button"
+                class="inline-flex items-center h-10 px-6 font-bold transition-colors rounded-lg hover:bg-blue-600 hover:text-white"
+            >
+                Register
+            </a>
         @endauth
     </header>
     <div class="grid max-w-3xl grid-cols-3 mx-auto mt-6 gap-x-10 gap-y-6">
