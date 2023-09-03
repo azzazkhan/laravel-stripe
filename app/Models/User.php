@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -47,7 +49,6 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
-        'balance' => 'encrypted',
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
@@ -60,6 +61,18 @@ class User extends Authenticatable
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /**
+     * Get the user's encrypted balance.
+     */
+    protected function balance(): Attribute
+    {
+        return Attribute::make(
+            // Accepting null because initially user will not have a value
+            get: fn (?string $value) => $value ? decrypt($value, true) : 0,
+            set: fn (string $value) => encrypt($value),
+        );
     }
 
     /**
