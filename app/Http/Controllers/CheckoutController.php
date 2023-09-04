@@ -42,7 +42,7 @@ class CheckoutController extends Controller
         // ];
 
         $checkout = $user->checkoutCharge(
-            amount: (int) ($package->price * 100),
+            amount: (int) ceil($package->price * 100),
             name: $package->name,
             sessionOptions: [
                 'client_reference_id' => $user->id,
@@ -60,7 +60,7 @@ class CheckoutController extends Controller
         $transaction = new Transaction();
 
         $transaction->ulid = $secret;
-        $transaction->amount = (int) ($package->price * 100);
+        $transaction->amount = (int) ceil($package->price * 100);
         $transaction->status = 'pending';
         $transaction->session = $session->id;
         $transaction->expires_at = $session->expires_at;
@@ -108,7 +108,7 @@ class CheckoutController extends Controller
         abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was cancelled!');
         abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order expired!');
 
-        $amount = number_format($transaction->amount, 2);
+        $amount = number_format($transaction->amount / 100, 2);
         $package = $transaction->package;
 
         // Transaction already marked successful by webhooks and resources were
@@ -149,19 +149,23 @@ class CheckoutController extends Controller
         /** @var \App\Models\User */
         $user = $request->user();
 
+        // Make sure the transaction was initiated by the current user
         abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
-        abort_if($transaction->successful, Response::HTTP_BAD_REQUEST, 'The payment was already received!');
-        abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was already cancelled!');
-        abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order was expired!');
 
-        $amount = number_format($transaction->amount, 2);
+        // Show error if transaction was already marked successful
+        abort_if($transaction->successful, Response::HTTP_BAD_REQUEST, 'The payment was already received!');
+
+        $amount = number_format($transaction->amount / 100, 2);
         $package = $transaction->package->name;
 
-        // Transaction was already cancelled
-        if ($transaction->cancelled)
+        // Transaction was either cancelled by user or the checkout session expired
+        if ($transaction->cancelled || $transaction->expired)
             return view('checkout.cancel', compact('amount', 'package'));
 
         $session = Cashier::stripe()->checkout->sessions->retrieve($transaction->session);
+        // Checkout session was already paid!
+        abort_if($session->payment_status == 'paid', Response::HTTP_BAD_REQUEST, 'The payment was already received!');
+
         @$session->expire(); // Expire the stripe checkout session
 
         $transaction->status = 'cancelled';
