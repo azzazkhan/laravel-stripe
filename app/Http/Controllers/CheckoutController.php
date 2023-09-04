@@ -103,7 +103,7 @@ class CheckoutController extends Controller
         abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
         abort_if($transaction->session != $validated['session'], Response::HTTP_NOT_FOUND);
 
-        logger()->channel('stderr')->debug('Received checkout success request');
+        logger()->channel('single')->debug('[CheckoutController@success] Received checkout success request');
 
         abort_if($transaction->cancelled, Response::HTTP_BAD_REQUEST, 'The order was cancelled!');
         abort_if($transaction->expired, Response::HTTP_BAD_REQUEST, 'The order expired!');
@@ -113,26 +113,42 @@ class CheckoutController extends Controller
 
         // Transaction already marked successful by webhooks and resources were
         // credited to the user's account
-        if ($transaction->successful)
-            return view('checkout.success', compact('amount', 'package'));
+        if ($transaction->successful) {
+            logger()
+                ->channel('single')
+                ->debug('[CheckoutController@success] Transaction already verified and marked successful');
 
-        logger()->channel('stderr')->debug('Retrieving and validating checkout session');
+            return view('checkout.success', compact('amount', 'package'));
+        }
+
+        logger()
+            ->channel('single')
+            ->debug('[CheckoutController@success] Retrieving and validating checkout session');
 
         // Retrieve session from Strip and validate it
         $session = Cashier::stripe()->checkout->sessions->retrieve($validated['session']);
 
         // Save the retrieved session in storage for inspection
-        $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
-        Storage::put("checkout/$filename", $session->toJSON());
+        $filename = sprintf('%s_%s.json', now()->format('Y-m-d_H-i-s_u'), $session->object);
+        Storage::put("stripe/verifications/$filename", $session->toJSON());
 
         // Stripe may have mistakenly redirected the user, redirect back to the
         // payment URL
-        if ($session->payment_status != 'paid')
+        if ($session->payment_status != 'paid') {
+            logger()
+                ->channel('single')
+                ->debug('[CheckoutController@success] Session not paid yet, redirecting back to checkout');
+
             return redirect($session->url);
+        }
 
         // Mark the transaction as successful and credit the resources to user
         // if not already credited
         TransactionCreditService::credit($transaction);
+
+        logger()
+            ->channel('single')
+            ->debug('[CheckoutController@success] Session verification done, showing success page');
 
         return view('checkout.success', compact('amount', 'package'));
     }
@@ -149,6 +165,10 @@ class CheckoutController extends Controller
         /** @var \App\Models\User */
         $user = $request->user();
 
+        logger()
+            ->channel('single')
+            ->debug('[CheckoutController@cancel] Received session cancellation request');
+
         // Make sure the transaction was initiated by the current user
         abort_if($transaction->user_id != $user->id, Response::HTTP_NOT_FOUND);
 
@@ -159,8 +179,13 @@ class CheckoutController extends Controller
         $package = $transaction->package->name;
 
         // Transaction was either cancelled by user or the checkout session expired
-        if ($transaction->cancelled || $transaction->expired)
+        if ($transaction->cancelled || $transaction->expired) {
+            logger()
+                ->channel('single')
+                ->debug('[CheckoutController@cancel] Session was already expired or cancelled');
+
             return view('checkout.cancel', compact('amount', 'package'));
+        }
 
         $session = Cashier::stripe()->checkout->sessions->retrieve($transaction->session);
         // Checkout session was already paid!
@@ -171,9 +196,11 @@ class CheckoutController extends Controller
         $transaction->status = 'cancelled';
         $transaction->save();
 
-        logger()->channel('stderr')->debug('Expired the session and cancelled transaction!');
-        $filename = sprintf('%s_%s.json', now()->format('H-i-s-u'), $session->object);
-        Storage::put("checkout/$filename", $session->toJSON());
+        logger()
+            ->channel('single')
+            ->debug('[CheckoutController@cancel] Expired the session and cancelled transaction');
+        $filename = sprintf('%s_%s.json', now()->format('Y-m-d_H-i-s_u'), $session->object);
+        Storage::put("stripe/cancelled/$filename", $session->toJSON());
 
         return view('checkout.cancel', compact('amount', 'package'));
     }

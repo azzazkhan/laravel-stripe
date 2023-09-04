@@ -88,7 +88,7 @@ class User extends Authenticatable
             $user->createAsStripeCustomer([
                 'description' => sprintf('Created by %s on registration', config('app.name')),
             ]);
-            logger()->channel('stderr')->debug('New Stripe customer created!');
+            logger()->channel('single')->debug('New Stripe customer created!');
         });
 
         static::updated(queueable(function (User $customer) {
@@ -108,10 +108,10 @@ class User extends Authenticatable
             if ($user->hasStripeId())
                 try {
                     $user->stripe()->customers->delete($user->stripeId());
-                    logger()->channel('stderr')->debug('Stripe customer deleted!');
+                    logger()->channel('single')->debug('Stripe customer deleted!');
                 } catch (ApiErrorException $e) {
                     logger('stderr')->error('Could not delete stripe customer!');
-                    logger()->channel('stderr')->error('Could not delete stripe customer!', ['message' => $e->getMessage()]);
+                    logger()->channel('single')->error('Could not delete stripe customer!', ['message' => $e->getMessage()]);
                 }
         });
     }

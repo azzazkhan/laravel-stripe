@@ -115,7 +115,7 @@ class Transaction extends Model
     public function successful(): Attribute
     {
         return Attribute::get(function (mixed $value, array $attrs) {
-            return $attrs['status'] == 'successful' && $attrs['received'];
+            return $attrs['status'] == 'successful';
         });
     }
 
