@@ -101,7 +101,10 @@ class User extends Authenticatable
                 $user->update(['coins' => (int) $user->balance]);
         });
 
-        static::deleted(function (User $user) {
+        //! User can be deleted in our application!
+        static::deleting(function (User $user) {
+            $user->transactions()->delete();
+
             if ($user->hasStripeId())
                 try {
                     $user->stripe()->customers->delete($user->stripeId());
