@@ -46,18 +46,19 @@ class TransactionCreditService
                 // credited to the user
                 if ($result->status == 'successful') return;
 
-                $coins = (int) decrypt($result->balance) + $result->pack_coins + $result->pack_add_coins;
+                $coins = $result->pack_coins + $result->pack_add_coins;
+                $balance = (int) decrypt($result->balance) + $coins;
 
                 // Set transaction as successful and credit the user's account
                 DB::table('transactions')->where('ulid', $transactionId)->update(['status' => 'successful']);
                 DB::table('users')->where('id', $result->user_id)->update([
-                    'balance' => encrypt($coins),
-                    'coins' => $coins,
+                    'balance' => encrypt($balance),
+                    'coins' => $balance,
                 ]);
 
                 logger()
                     ->channel('stderr')
-                    ->debug(sprintf('Credited user %d with %d coins', $result->user_id, $coins));
+                    ->debug(sprintf('Credited user %d with %d coins, new balance is %d', $result->user_id, $coins, $balance));
             });
         } catch (Exception $e) {
             logger()->channel('stderr')->debug('Error ocurred while crediting users account');
