@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Package;
 use App\Models\Transaction;
 use App\Services\TransactionCreditService;
+use Exception;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -191,7 +192,12 @@ class CheckoutController extends Controller
         // Checkout session was already paid!
         abort_if($session->payment_status == 'paid', Response::HTTP_BAD_REQUEST, 'The payment was already received!');
 
-        @$session->expire(); // Expire the stripe checkout session
+        try {
+            $session->expire();
+        } catch (Exception) {
+            // Could not expire session, it may already have been expired or paid
+            abort(Response::HTTP_INTERNAL_SERVER_ERROR, 'An error occurred while cancelling your order!');
+        }
 
         $transaction->status = 'cancelled';
         $transaction->save();
