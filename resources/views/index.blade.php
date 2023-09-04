@@ -5,10 +5,14 @@
         </a>
 
         @auth
-            <div class="flex items-center space-x-2">
+            <a
+                href="{{ route('profile.edit') }}"
+                role="button"
+                class="inline-flex items-center h-10 px-4 space-x-2 transition-colors border border-transparent rounded-lg hover:bg-gray-300"
+            >
                 <img src={{ Vite::asset('resources/images/coin.png') }} class="h-5" alt="coin" />
                 <span class="font-bold">{{ Auth::user()->balance }}</span>
-            </div>
+            </a>
         @else
             <a
                 href="{{ route('register') }}"
